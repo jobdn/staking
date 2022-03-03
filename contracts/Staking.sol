@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "hardhat/console.sol";
 
 contract Staking {
     IERC20 public stakingToken;
@@ -32,6 +33,9 @@ contract Staking {
     constructor(address _stakingToken, address _rewardToken) {
         stakingToken = IERC20(_stakingToken);
         rewardToken = IERC20(_rewardToken);
+
+        // To avoid bug of index-1 
+        stakeholders.push();
     }
 
     function addStakeholder(address _stakeholderAddress)
