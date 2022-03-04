@@ -17,6 +17,7 @@ contract Staking {
     struct Stakeholder {
         address stakeholderAddress;
         Stake[] stakes;
+        uint256 totalStaking;
     }
 
     Stakeholder[] public stakeholders;
@@ -69,6 +70,7 @@ contract Staking {
             })
         );
 
+        stakeholders[stakeholderIndex].totalStaking += _amount;
         balances[msg.sender] += _amount;
         stakingToken.transferFrom(msg.sender, address(this), _amount);
 
@@ -79,23 +81,14 @@ contract Staking {
         uint256 senderIndex = stakeholderToIndex[msg.sender];
         require(senderIndex != 0, "There is no you in stakeholder list");
         require(hasStakes(senderIndex), "Have no stakes");
-        uint256 allAmountOfStake;
 
-        Stake[] memory stakeholderStakes = stakeholders[senderIndex].stakes;
+        Stakeholder storage stakeholder = stakeholders[senderIndex];
+        uint256 totalStakingOfStakeholder = stakeholder.totalStaking;
+        delete stakeholder.stakes;
 
-        for (
-            uint256 stakeIndex = 0;
-            stakeIndex < stakeholderStakes.length;
-            stakeIndex++
-        ) {
-            Stake memory currentStake = stakeholderStakes[stakeIndex];
-            allAmountOfStake += currentStake.amount;
-        }
-
-        delete stakeholders[senderIndex].stakes;
-
-        balances[msg.sender] -= allAmountOfStake;
-        stakingToken.transfer(msg.sender, allAmountOfStake);
+        stakeholder.totalStaking = 0;
+        balances[msg.sender] -= totalStakingOfStakeholder;
+        stakingToken.transfer(msg.sender, totalStakingOfStakeholder);
     }
 
     function calculateStakeReward(Stake memory currentStake)

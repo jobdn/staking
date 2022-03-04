@@ -39,26 +39,43 @@ describe("Staking", function () {
     await staking.deployed();
   });
 
-  describe("Make staking", () => {
+  describe("Stake", () => {
     it("Should make stake", async () => {
       await stakingToken.mint(owner.address, 10000);
       await stakingToken.approve(staking.address, 1000);
 
       await staking.stake(100);
-      expect(await staking.balances(owner.address)).to.equal(100);
+      await staking.stake(100);
+      expect(await staking.balances(owner.address)).to.equal(200);
 
       // Check that stakeholder is added to stakeholderToIndex mapping
       const firstStakeholderIndex = await staking.stakeholderToIndex(
         owner.address
       );
       expect(firstStakeholderIndex).to.equal(1);
+      
+      staking
+        .stakeholders(firstStakeholderIndex)
+        .then((stakeholder) => {
+          expect(stakeholder.stakeholderAddress).to.equal(owner.address);
+          expect(stakeholder.totalStaking).to.equal(200);
+        })
+        .catch(console.log);
 
       //Check for acc1
       await stakingToken.mint(acc1.address, 10000);
       await stakingToken.connect(acc1).approve(staking.address, 1000);
 
-      await staking.connect(acc1).stake(100);
-      expect(await staking.balances(acc1.address)).to.equal(100);
+      await staking.connect(acc1).stake(10);
+      expect(await staking.balances(acc1.address)).to.equal(10);
+
+      staking
+      .stakeholders(2)
+      .then((stakeholder) => {
+        expect(stakeholder.stakeholderAddress).to.equal(acc1.address);
+        expect(stakeholder.totalStaking).to.equal(10);
+      })
+      .catch(console.log);
     });
 
     it("Should fail if amount is equal to 0", async () => {
@@ -77,17 +94,19 @@ describe("Staking", function () {
       await rewardToken.mint(staking.address, 10000);
       expect(await rewardToken.balanceOf(staking.address)).to.equal(10000);
 
+      // First stake
       await staking.stake(1000);
       expect(await staking.balances(owner.address)).to.equal(1000);
 
+      // 30 minutes went
       await network.provider.send("evm_increaseTime", [1800]);
-
       await staking.stake(500);
       expect(await staking.balances(owner.address)).to.equal(1500);
 
+      // 30 minutes went
       await network.provider.send("evm_increaseTime", [1800]);
-
       await staking.claim();
+      expect(await rewardToken.balanceOf(owner.address)).to.equal(1500);
 
       await network.provider.send("evm_increaseTime", [1800]);
       await staking.claim();
