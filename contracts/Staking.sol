@@ -27,7 +27,8 @@ contract Staking is AccessControl {
     Stakeholder[] public stakeholders;
     mapping(address => uint256) public stakeholderToIndex;
     mapping(address => uint256) public balances;
-    uint256 public rewardPerTime = 20;
+    uint256 public rewardPercent = 20;
+    uint256 public timeCharge = 1 minutes;
     uint256 public freezeTime = 1 minutes;
 
     event Staked(
@@ -61,7 +62,16 @@ contract Staking is AccessControl {
             hasRole(ADMIN_ROLE, msg.sender),
             "Only owner can set reward per time"
         );
-        rewardPerTime = _rewardPerTime;
+        rewardPercent = _rewardPerTime;
+    }
+
+    function setTimeCharge(uint256 _timeCharge) public {
+        require(
+            hasRole(ADMIN_ROLE, msg.sender),
+            "Only owner can set time when reward tokens is charged"
+        );
+
+        timeCharge = _timeCharge * 1 minutes;
     }
 
     function hasStakes(uint256 index) internal view returns (bool) {
@@ -134,11 +144,11 @@ contract Staking is AccessControl {
         returns (uint256)
     {
         uint256 amountOfTenMinutes = (block.timestamp - currentStake.since) /
-            10 minutes;
+            timeCharge;
         uint256 stakingTokenPerMinutes = amountOfTenMinutes *
             currentStake.amount;
         uint256 rewardForCurrentStake = (stakingTokenPerMinutes *
-            rewardPerTime) / 100;
+            rewardPercent) / 100;
 
         return rewardForCurrentStake;
     }
