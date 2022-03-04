@@ -39,6 +39,10 @@ contract Staking {
         stakeholders.push();
     }
 
+    function hasStakes(uint256 index) internal view returns (bool) {
+        return stakeholders[index].stakes.length != 0;
+    }
+
     function addStakeholder(address _stakeholderAddress)
         internal
         returns (uint256)
@@ -66,56 +70,54 @@ contract Staking {
         );
 
         balances[msg.sender] += _amount;
-        console.log("TIME STAMP in stake: ", block.timestamp);
-
-        // TODO: разрешить контракту списывать токены с контракта staking токена
         stakingToken.transferFrom(msg.sender, address(this), _amount);
 
         emit Staked(msg.sender, _amount, stakeholderIndex, block.timestamp);
     }
 
-    function unstake() public {}
+    function unstake() public {
+        uint256 senderIndex = stakeholderToIndex[msg.sender];
+        require(senderIndex != 0, "There is no you in stakeholder list");
+        require(hasStakes(senderIndex), "Have no stakes");
+        uint256 allAmountOfStake;
+
+        Stake[] memory stakeholderStakes = stakeholders[senderIndex].stakes;
+
+        for (
+            uint256 stakeIndex = 0;
+            stakeIndex < stakeholderStakes.length;
+            stakeIndex++
+        ) {
+            Stake memory currentStake = stakeholderStakes[stakeIndex];
+            allAmountOfStake += currentStake.amount;
+        }
+
+        delete stakeholders[senderIndex].stakes;
+
+        balances[msg.sender] -= allAmountOfStake;
+        stakingToken.transfer(msg.sender, allAmountOfStake);
+    }
 
     function calculateStakeReward(Stake memory currentStake)
         internal
         view
         returns (uint256)
     {
-        console.log("================CALCULATE REWARDS================");
-        console.log("CURRENT STAKE AMOUNT: ", currentStake.amount);
-        console.log("CURRENT STAKE SINCE: ", currentStake.since);
-        console.log("CURRENT STAKE HOLDER: ", currentStake.stakeholderAddress);
-
         uint256 amountOfTenMinutes = (block.timestamp - currentStake.since) /
             10 minutes;
-
-        console.log("WHAT 10 minutes is went: ", amountOfTenMinutes);
-
         uint256 stakingTokenPerMinutes = amountOfTenMinutes *
             currentStake.amount;
-        console.log(
-            "STAKING TOKENS * AMOUNT OF TEN MINUTES: ",
-            stakingTokenPerMinutes
-        );
-
         uint256 rewardForCurrentStake = (stakingTokenPerMinutes * 20) / 100;
-        console.log("Current reward amount: ", rewardForCurrentStake);
 
         return rewardForCurrentStake;
     }
 
     function claim() public {
-        console.log("\nTIME STAMP in claim: ", block.timestamp);
         uint256 senderIndex = stakeholderToIndex[msg.sender];
-        // Пользователь снимает все ревард токены, то нет проверки на количество ревард токенов
 
-        /*
-         * А может ли быть ревард токенов не быть?
-         * При стейкинге создается элемент стейкинга в массив к юзеру
-         */
+        require(senderIndex != 0, "There is no you in stakeholder list");
+        require(hasStakes(senderIndex), "Have no stakes");
 
-        // Если пользователь есть в массиве инвесторов, то у него точно будут ревард токены
-        require(senderIndex != 0, "Have no stake");
         Stake[] memory stakeholderStakes = stakeholders[senderIndex].stakes;
         uint256 allRewardsOfSender;
 
@@ -130,8 +132,6 @@ contract Staking {
                 .timestamp;
         }
 
-        // Нужно удалять ревард токены
-        console.log("ALL REWARDS: ", allRewardsOfSender);
         rewardToken.transfer(msg.sender, allRewardsOfSender);
     }
 }
