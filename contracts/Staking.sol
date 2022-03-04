@@ -22,6 +22,7 @@ contract Staking {
     Stakeholder[] public stakeholders;
     mapping(address => uint256) public stakeholderToIndex;
     mapping(address => uint256) public balances;
+    uint256 public constant rewardPerTenMinutes = 20;
 
     event Staked(
         address indexed stakeholder,
@@ -34,7 +35,7 @@ contract Staking {
         stakingToken = IERC20(_stakingToken);
         rewardToken = IERC20(_rewardToken);
 
-        // To avoid bug of index-1 
+        // To avoid bug of index-1
         stakeholders.push();
     }
 
@@ -65,6 +66,7 @@ contract Staking {
         );
 
         balances[msg.sender] += _amount;
+        console.log("TIME STAMP in stake: ", block.timestamp);
 
         // TODO: разрешить контракту списывать токены с контракта staking токена
         stakingToken.transferFrom(msg.sender, address(this), _amount);
@@ -74,5 +76,62 @@ contract Staking {
 
     function unstake() public {}
 
-    function claim() public {}
+    function calculateStakeReward(Stake memory currentStake)
+        internal
+        view
+        returns (uint256)
+    {
+        console.log("================CALCULATE REWARDS================");
+        console.log("CURRENT STAKE AMOUNT: ", currentStake.amount);
+        console.log("CURRENT STAKE SINCE: ", currentStake.since);
+        console.log("CURRENT STAKE HOLDER: ", currentStake.stakeholderAddress);
+
+        uint256 amountOfTenMinutes = (block.timestamp - currentStake.since) /
+            10 minutes;
+
+        console.log("WHAT 10 minutes is went: ", amountOfTenMinutes);
+
+        uint256 stakingTokenPerMinutes = amountOfTenMinutes *
+            currentStake.amount;
+        console.log(
+            "STAKING TOKENS * AMOUNT OF TEN MINUTES: ",
+            stakingTokenPerMinutes
+        );
+
+        uint256 rewardForCurrentStake = (stakingTokenPerMinutes * 20) / 100;
+        console.log("Current reward amount: ", rewardForCurrentStake);
+
+        return rewardForCurrentStake;
+    }
+
+    function claim() public {
+        console.log("\nTIME STAMP in claim: ", block.timestamp);
+        uint256 senderIndex = stakeholderToIndex[msg.sender];
+        // Пользователь снимает все ревард токены, то нет проверки на количество ревард токенов
+
+        /*
+         * А может ли быть ревард токенов не быть?
+         * При стейкинге создается элемент стейкинга в массив к юзеру
+         */
+
+        // Если пользователь есть в массиве инвесторов, то у него точно будут ревард токены
+        require(senderIndex != 0, "Have no stake");
+        Stake[] memory stakeholderStakes = stakeholders[senderIndex].stakes;
+        uint256 allRewardsOfSender;
+
+        for (
+            uint256 stakeIndex = 0;
+            stakeIndex < stakeholderStakes.length;
+            stakeIndex++
+        ) {
+            Stake memory currentStake = stakeholderStakes[stakeIndex];
+            allRewardsOfSender += calculateStakeReward(currentStake);
+            stakeholders[senderIndex].stakes[stakeIndex].since = block
+                .timestamp;
+        }
+
+        // Нужно удалять ревард токены
+        console.log("ALL REWARDS: ", allRewardsOfSender);
+        rewardToken.transfer(msg.sender, allRewardsOfSender);
+    }
 }
