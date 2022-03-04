@@ -39,21 +39,37 @@ describe("Staking", function () {
     await staking.deployed();
   });
 
+  const mintForAndApproveTokensFor = async (
+    mintFor: SignerWithAddress,
+    approved: string,
+    amount: number,
+    token: ERC20 = stakingToken
+  ) => {
+    await token.mint(mintFor.address, amount);
+    await token.connect(mintFor).approve(approved, amount);
+  };
+
+  const stakeFromAndCheckStakingBalance = async (
+    from: SignerWithAddress,
+    stakedAmount: number,
+    expectedBalanceOfStake: number
+  ) => {
+    await staking.connect(from).stake(stakedAmount);
+    expect(await staking.balances(from.address)).to.equal(
+      expectedBalanceOfStake
+    );
+  };
+
   describe("Stake", () => {
     it("Should make stake", async () => {
-      await stakingToken.mint(owner.address, 10000);
-      await stakingToken.approve(staking.address, 1000);
-
-      await staking.stake(100);
-      await staking.stake(100);
-      expect(await staking.balances(owner.address)).to.equal(200);
+      await mintForAndApproveTokensFor(owner, staking.address, 10000);
+      await stakeFromAndCheckStakingBalance(owner, 200, 200);
 
       // Check that stakeholder is added to stakeholderToIndex mapping
       const firstStakeholderIndex = await staking.stakeholderToIndex(
         owner.address
       );
       expect(firstStakeholderIndex).to.equal(1);
-
       staking
         .stakeholders(firstStakeholderIndex)
         .then((stakeholder) => {
@@ -63,45 +79,37 @@ describe("Staking", function () {
         .catch(console.log);
 
       //Check for acc1
-      await stakingToken.mint(acc1.address, 10000);
-      await stakingToken.connect(acc1).approve(staking.address, 1000);
-
-      await staking.connect(acc1).stake(10);
-      expect(await staking.balances(acc1.address)).to.equal(10);
+      await mintForAndApproveTokensFor(acc1, staking.address, 100000);
+      await stakeFromAndCheckStakingBalance(acc1, 100, 100);
 
       staking
         .stakeholders(2)
         .then((stakeholder) => {
           expect(stakeholder.stakeholderAddress).to.equal(acc1.address);
-          expect(stakeholder.totalStaking).to.equal(10);
+          expect(stakeholder.totalStaking).to.equal(100);
         })
         .catch(console.log);
     });
 
     it("Should fail if amount is equal to 0", async () => {
-      await stakingToken.mint(owner.address, 10000);
-      await stakingToken.approve(staking.address, 1000);
-
+      mintForAndApproveTokensFor(owner, staking.address, 10000);
       await expect(staking.stake(0)).to.be.revertedWith("Cannot stake nothing");
     });
   });
 
   describe("Claim", () => {
     it("Should claim reward tokens", async () => {
-      await stakingToken.mint(owner.address, 100000);
-      await stakingToken.approve(staking.address, 100000);
+      await mintForAndApproveTokensFor(owner, staking.address, 100000);
 
       await rewardToken.mint(staking.address, 100000);
       expect(await rewardToken.balanceOf(staking.address)).to.equal(100000);
 
       // First stake
-      await staking.stake(1000);
-      expect(await staking.balances(owner.address)).to.equal(1000);
+      await stakeFromAndCheckStakingBalance(owner, 1000, 1000);
 
       // 30 minutes went
       await network.provider.send("evm_increaseTime", [1800]);
-      await staking.stake(500);
-      expect(await staking.balances(owner.address)).to.equal(1500);
+      await stakeFromAndCheckStakingBalance(owner, 500, 1500);
 
       // 30 minutes went
       await network.provider.send("evm_increaseTime", [1800]);
@@ -129,18 +137,14 @@ describe("Staking", function () {
 
   describe("Unstake", () => {
     it("Should unstake all stake of the user", async () => {
-      await stakingToken.mint(owner.address, 10000);
-      await stakingToken.approve(staking.address, 10000);
-
-      await staking.stake(1000);
-      expect(await stakingToken.balanceOf(owner.address)).to.equal(9000);
-      expect(await staking.balances(owner.address)).to.equal(1000);
-      await staking.stake(1000);
-      expect(await stakingToken.balanceOf(owner.address)).to.equal(8000);
-      expect(await staking.balances(owner.address)).to.equal(2000);
+      await mintForAndApproveTokensFor(owner, staking.address, 10000);
+      await stakeFromAndCheckStakingBalance(owner, 1000, 1000);
+      await stakeFromAndCheckStakingBalance(owner, 1000, 2000);
 
       await network.provider.send("evm_increaseTime", [120]);
       await network.provider.send("evm_mine");
+
+      // ====================================
       await staking.unstake();
       expect(await stakingToken.balanceOf(owner.address)).to.equal(10000);
       expect(await staking.balances(owner.address)).to.equal(0);
@@ -206,8 +210,7 @@ describe("Staking", function () {
 
   describe("Set rewardPercent", () => {
     it("Should set rewardPercent", async () => {
-      await stakingToken.mint(owner.address, 100000);
-      await stakingToken.approve(staking.address, 100000);
+      mintForAndApproveTokensFor(owner, staking.address, 100000);
 
       await rewardToken.mint(staking.address, 100000);
       expect(await rewardToken.balanceOf(staking.address)).to.equal(100000);
