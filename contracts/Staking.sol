@@ -28,6 +28,7 @@ contract Staking is AccessControl {
     mapping(address => uint256) public stakeholderToIndex;
     mapping(address => uint256) public balances;
     uint256 public rewardPercent = 20;
+    // (1 / timeCharge) reward per time
     uint256 public timeCharge = 1 minutes;
     uint256 public freezeTime = 1 minutes;
 
@@ -57,12 +58,12 @@ contract Staking is AccessControl {
         freezeTime = _freezeTime * 1 minutes;
     }
 
-    function setRewardPerToken(uint256 _rewardPerTime) public {
+    function setRewardPercent(uint256 _rewardPercent) public {
         require(
             hasRole(ADMIN_ROLE, msg.sender),
-            "Only owner can set reward per time"
+            "Only owner can set persent from staking"
         );
-        rewardPercent = _rewardPerTime;
+        rewardPercent = _rewardPercent;
     }
 
     function setTimeCharge(uint256 _timeCharge) public {
@@ -119,7 +120,6 @@ contract Staking is AccessControl {
     }
 
     function unstake() public {
-        // TODO: сделать проверку, что время истекло и можно снимать лп токены
         uint256 senderIndex = stakeholderToIndex[msg.sender];
         require(senderIndex != 0, "There is no you in stakeholder list");
         require(hasStakes(senderIndex), "Have no stakes");

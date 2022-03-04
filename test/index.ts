@@ -88,11 +88,11 @@ describe("Staking", function () {
 
   describe("Claim", () => {
     it("Should claim reward tokens", async () => {
-      await stakingToken.mint(owner.address, 10000);
-      await stakingToken.approve(staking.address, 10000);
+      await stakingToken.mint(owner.address, 100000);
+      await stakingToken.approve(staking.address, 100000);
 
-      await rewardToken.mint(staking.address, 10000);
-      expect(await rewardToken.balanceOf(staking.address)).to.equal(10000);
+      await rewardToken.mint(staking.address, 100000);
+      expect(await rewardToken.balanceOf(staking.address)).to.equal(100000);
 
       // First stake
       await staking.stake(1000);
@@ -105,12 +105,18 @@ describe("Staking", function () {
 
       // 30 minutes went
       await network.provider.send("evm_increaseTime", [1800]);
+      // first stake: 60(отрезков времени по одной минуте) * 1000 * 0.2 = 12000
+      // second stake: 30 * 500 * 0.2 = 3000
       await staking.claim();
-      expect(await rewardToken.balanceOf(owner.address)).to.equal(1500);
+      expect(await rewardToken.balanceOf(owner.address)).to.equal(15000);
 
+      // 30minutes went
       await network.provider.send("evm_increaseTime", [1800]);
       await staking.claim();
-      expect(await rewardToken.balanceOf(owner.address)).to.equal(2400);
+
+      // first stake: 30(отрезков времени по одной минуте) * 1000 * 0.2 = 6000
+      // second stake: 30 * 500 * 0.2 = 3000
+      expect(await rewardToken.balanceOf(owner.address)).to.equal(24000);
       await network.provider.send("evm_mine");
     });
 
@@ -165,7 +171,7 @@ describe("Staking", function () {
       await stakingToken.mint(owner.address, 10000);
       await stakingToken.approve(staking.address, 10000);
       await staking.stake(1000);
-      
+
       await expect(staking.unstake()).to.be.revertedWith(
         "timeFreeze is not over"
       );
@@ -198,15 +204,15 @@ describe("Staking", function () {
     });
   });
 
-  describe("Set rewardPerToken", () => {
-    it("Should set rewardPerToken", async () => {
+  describe("Set rewardPercent", () => {
+    it("Should set rewardPercent", async () => {
       await stakingToken.mint(owner.address, 100000);
       await stakingToken.approve(staking.address, 100000);
 
-      await rewardToken.mint(staking.address, 10000);
-      expect(await rewardToken.balanceOf(staking.address)).to.equal(10000);
+      await rewardToken.mint(staking.address, 100000);
+      expect(await rewardToken.balanceOf(staking.address)).to.equal(100000);
 
-      await staking.setRewardPerToken(30);
+      await staking.setRewardPercent(30);
       await staking.stake(1000);
 
       // in 50 minutes
@@ -214,13 +220,26 @@ describe("Staking", function () {
       await network.provider.send("evm_mine");
       await staking.claim();
 
-      expect(await rewardToken.balanceOf(owner.address)).to.equal(1500);
+      expect(await rewardToken.balanceOf(owner.address)).to.equal(15000);
     });
 
     it("Should fail if not owner", async () => {
       await expect(
-        staking.connect(acc1).setRewardPerToken(30)
-      ).to.be.revertedWith("Only owner can set reward per time");
+        staking.connect(acc1).setRewardPercent(30)
+      ).to.be.revertedWith("Only owner can set persent from staking");
+    });
+  });
+
+  describe("Set timeChange", () => {
+    it("Should set timeCharge", async () => {
+      await staking.setTimeCharge(2);
+      expect(await staking.timeCharge()).to.equal(120);
+    });
+
+    it("Should fail if not owner", async () => {
+      await expect(staking.connect(acc1).setTimeCharge(30)).to.be.revertedWith(
+        "Only owner can set time when reward tokens is charged"
+      );
     });
   });
 });
