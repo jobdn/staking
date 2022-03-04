@@ -53,7 +53,7 @@ describe("Staking", function () {
         owner.address
       );
       expect(firstStakeholderIndex).to.equal(1);
-      
+
       staking
         .stakeholders(firstStakeholderIndex)
         .then((stakeholder) => {
@@ -70,12 +70,12 @@ describe("Staking", function () {
       expect(await staking.balances(acc1.address)).to.equal(10);
 
       staking
-      .stakeholders(2)
-      .then((stakeholder) => {
-        expect(stakeholder.stakeholderAddress).to.equal(acc1.address);
-        expect(stakeholder.totalStaking).to.equal(10);
-      })
-      .catch(console.log);
+        .stakeholders(2)
+        .then((stakeholder) => {
+          expect(stakeholder.stakeholderAddress).to.equal(acc1.address);
+          expect(stakeholder.totalStaking).to.equal(10);
+        })
+        .catch(console.log);
     });
 
     it("Should fail if amount is equal to 0", async () => {
@@ -133,6 +133,8 @@ describe("Staking", function () {
       expect(await stakingToken.balanceOf(owner.address)).to.equal(8000);
       expect(await staking.balances(owner.address)).to.equal(2000);
 
+      await network.provider.send("evm_increaseTime", [120]);
+      await network.provider.send("evm_mine");
       await staking.unstake();
       expect(await stakingToken.balanceOf(owner.address)).to.equal(10000);
       expect(await staking.balances(owner.address)).to.equal(0);
@@ -146,6 +148,9 @@ describe("Staking", function () {
       expect(await stakingToken.balanceOf(owner.address)).to.equal(9000);
       expect(await staking.balances(owner.address)).to.equal(1000);
 
+      await network.provider.send("evm_increaseTime", [120]);
+      await network.provider.send("evm_mine");
+
       await staking.unstake();
       await expect(staking.claim()).to.be.revertedWith("Have no stakes");
     });
@@ -156,12 +161,66 @@ describe("Staking", function () {
       );
     });
 
+    it("Should fail if timeFreeze is not over", async () => {
+      await stakingToken.mint(owner.address, 10000);
+      await stakingToken.approve(staking.address, 10000);
+      await staking.stake(1000);
+      
+      await expect(staking.unstake()).to.be.revertedWith(
+        "timeFreeze is not over"
+      );
+    });
+
     it("Should fail if sender want unstake more one time", async () => {
       await stakingToken.mint(owner.address, 10000);
       await stakingToken.approve(staking.address, 10000);
       await staking.stake(1000);
+
+      await network.provider.send("evm_increaseTime", [120]);
+      await network.provider.send("evm_mine");
+
       await staking.unstake();
+
       await expect(staking.unstake()).to.be.revertedWith("Have no stakes");
+    });
+  });
+
+  describe("Set freeze time", () => {
+    it("Should fail if not owner", async () => {
+      await expect(staking.connect(acc1).setFreezeTime(30)).to.be.revertedWith(
+        "Only owner can set timeFreeze"
+      );
+    });
+
+    it("Should set timeFreeze", async () => {
+      await staking.setFreezeTime(30);
+      expect(await staking.freezeTime()).to.equal(1800);
+    });
+  });
+
+  describe("Set rewardPerToken", () => {
+    it("Should set rewardPerToken", async () => {
+      await stakingToken.mint(owner.address, 100000);
+      await stakingToken.approve(staking.address, 100000);
+
+      await rewardToken.mint(staking.address, 10000);
+      expect(await rewardToken.balanceOf(staking.address)).to.equal(10000);
+
+      await staking.setRewardPerToken(30);
+      await staking.stake(1000);
+
+      // in 50 minutes
+      await network.provider.send("evm_increaseTime", [3000]);
+      await network.provider.send("evm_mine");
+      await staking.claim();
+
+      expect(await rewardToken.balanceOf(owner.address)).to.equal(1500);
+    });
+
+    it("Should fail if not owner", async () => {
+      await expect(
+        staking.connect(acc1).setRewardPerToken(30)
+      ).to.be.revertedWith("Only owner can set reward per time");
     });
   });
 });

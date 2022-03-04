@@ -2,11 +2,14 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import "hardhat/console.sol";
 
-contract Staking {
+contract Staking is AccessControl {
     IERC20 public stakingToken;
     IERC20 public rewardToken;
+
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     struct Stake {
         address stakeholderAddress;
@@ -18,12 +21,14 @@ contract Staking {
         address stakeholderAddress;
         Stake[] stakes;
         uint256 totalStaking;
+        uint256 timeOfFirstStake;
     }
 
     Stakeholder[] public stakeholders;
     mapping(address => uint256) public stakeholderToIndex;
     mapping(address => uint256) public balances;
-    uint256 public constant rewardPerTenMinutes = 20;
+    uint256 public rewardPerTime = 20;
+    uint256 public freezeTime = 1 minutes;
 
     event Staked(
         address indexed stakeholder,
@@ -36,8 +41,27 @@ contract Staking {
         stakingToken = IERC20(_stakingToken);
         rewardToken = IERC20(_rewardToken);
 
-        // To avoid bug of index-1
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(ADMIN_ROLE, msg.sender);
+
+        // To avoid bug of index-1 when index is 0
         stakeholders.push();
+    }
+
+    function setFreezeTime(uint256 _freezeTime) public {
+        require(
+            hasRole(ADMIN_ROLE, msg.sender),
+            "Only owner can set timeFreeze"
+        );
+        freezeTime = _freezeTime * 1 minutes;
+    }
+
+    function setRewardPerToken(uint256 _rewardPerTime) public {
+        require(
+            hasRole(ADMIN_ROLE, msg.sender),
+            "Only owner can set reward per time"
+        );
+        rewardPerTime = _rewardPerTime;
     }
 
     function hasStakes(uint256 index) internal view returns (bool) {
@@ -62,7 +86,14 @@ contract Staking {
             stakeholderIndex = addStakeholder(msg.sender);
         }
 
-        stakeholders[stakeholderIndex].stakes.push(
+        Stakeholder storage stakeholder = stakeholders[stakeholderIndex];
+
+        // User stakes first time
+        if (stakeholder.stakes.length == 0) {
+            stakeholder.timeOfFirstStake = block.timestamp;
+        }
+
+        stakeholder.stakes.push(
             Stake({
                 stakeholderAddress: msg.sender,
                 amount: _amount,
@@ -70,7 +101,7 @@ contract Staking {
             })
         );
 
-        stakeholders[stakeholderIndex].totalStaking += _amount;
+        stakeholder.totalStaking += _amount;
         balances[msg.sender] += _amount;
         stakingToken.transferFrom(msg.sender, address(this), _amount);
 
@@ -78,9 +109,15 @@ contract Staking {
     }
 
     function unstake() public {
+        // TODO: сделать проверку, что время истекло и можно снимать лп токены
         uint256 senderIndex = stakeholderToIndex[msg.sender];
         require(senderIndex != 0, "There is no you in stakeholder list");
         require(hasStakes(senderIndex), "Have no stakes");
+        require(
+            block.timestamp >
+                stakeholders[senderIndex].timeOfFirstStake + freezeTime,
+            "timeFreeze is not over"
+        );
 
         Stakeholder storage stakeholder = stakeholders[senderIndex];
         uint256 totalStakingOfStakeholder = stakeholder.totalStaking;
@@ -100,7 +137,8 @@ contract Staking {
             10 minutes;
         uint256 stakingTokenPerMinutes = amountOfTenMinutes *
             currentStake.amount;
-        uint256 rewardForCurrentStake = (stakingTokenPerMinutes * 20) / 100;
+        uint256 rewardForCurrentStake = (stakingTokenPerMinutes *
+            rewardPerTime) / 100;
 
         return rewardForCurrentStake;
     }
