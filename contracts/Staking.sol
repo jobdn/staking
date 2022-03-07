@@ -1,178 +1,111 @@
-//SPDX-License-Identifier: Unlicense
+// SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "hardhat/console.sol";
 
 contract Staking is AccessControl {
-    IERC20 public stakingToken;
     IERC20 public rewardToken;
+    IERC20 public stakingToken;
+    uint256 public rewardTime = 1 minutes;
+    uint256 public stakingRate = 20;
+    uint256 public freezeTime = 1 minutes;
+
+    struct Holder {
+        uint256 reward;
+        uint256 lastRewardUpdateTime;
+    }
+
+    mapping(address => uint256) public balances;
+    mapping(address => Holder) public holders;
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
-    struct Stake {
-        address stakeholderAddress;
-        uint256 amount;
-        uint256 since;
-    }
-
-    struct Stakeholder {
-        address stakeholderAddress;
-        Stake[] stakes;
-        uint256 totalStaking;
-        uint256 timeOfFirstStake;
-    }
-
-    Stakeholder[] public stakeholders;
-    mapping(address => uint256) public stakeholderToIndex;
-    mapping(address => uint256) public balances;
-    uint256 public rewardPercent = 20;
-    // (1 / timeCharge) reward per time
-    uint256 public timeCharge = 1 minutes;
-    uint256 public freezeTime = 1 minutes;
-
-    event Staked(
-        address indexed stakeholder,
-        uint256 amount,
-        uint256 stakeholderIndex,
-        uint256 timestamp
-    );
+    event Staked(address indexed staker, uint256 amount, uint256 time);
+    event Claimed(address indexed staker, uint256 amount, uint256 time);
+    event Unstaked(address indexed staker, uint256 amount, uint256 time);
 
     constructor(address _stakingToken, address _rewardToken) {
         stakingToken = IERC20(_stakingToken);
         rewardToken = IERC20(_rewardToken);
 
-        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setupRole(ADMIN_ROLE, msg.sender);
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
 
-        // To avoid bug of index-1 when index is 0
-        stakeholders.push();
+    function setRate(uint256 _rate) public {
+        require(hasRole(ADMIN_ROLE, msg.sender), "Only admin can set the rate");
+        stakingRate = _rate;
     }
 
     function setFreezeTime(uint256 _freezeTime) public {
         require(
             hasRole(ADMIN_ROLE, msg.sender),
-            "Only owner can set timeFreeze"
+            "Only admin can set the frezeeTime"
         );
         freezeTime = _freezeTime * 1 minutes;
     }
 
-    function setRewardPercent(uint256 _rewardPercent) public {
+    function setRewardTime(uint256 _rewardTime) public {
         require(
             hasRole(ADMIN_ROLE, msg.sender),
-            "Only owner can set persent from staking"
+            "Only admin can set the time of reward"
         );
-        rewardPercent = _rewardPercent;
+        rewardTime = _rewardTime * 1 minutes;
     }
 
-    function setTimeCharge(uint256 _timeCharge) public {
-        require(
-            hasRole(ADMIN_ROLE, msg.sender),
-            "Only owner can set time when reward tokens is charged"
-        );
-
-        timeCharge = _timeCharge * 1 minutes;
+    function updateReward(address _holderAddress) internal {
+        holders[_holderAddress].reward += earned(_holderAddress);
+        holders[_holderAddress].lastRewardUpdateTime = block.timestamp;
     }
 
-    function hasStakes(uint256 index) internal view returns (bool) {
-        return stakeholders[index].stakes.length != 0;
-    }
-
-    function addStakeholder(address _stakeholderAddress)
-        internal
-        returns (uint256)
-    {
-        stakeholders.push();
-        uint256 stakeholderIndex = stakeholders.length - 1;
-        stakeholderToIndex[_stakeholderAddress] = stakeholderIndex;
-        stakeholders[stakeholderIndex].stakeholderAddress = _stakeholderAddress;
-        return stakeholderIndex;
+    function earned(address _address) internal view returns (uint256) {
+        uint256 integerAmountOfRewardTime = (block.timestamp -
+            holders[_address].lastRewardUpdateTime) / rewardTime;
+        uint256 reward = ((integerAmountOfRewardTime * balances[_address]) *
+            stakingRate) / 100;
+        return reward;
     }
 
     function stake(uint256 _amount) public {
+        updateReward(msg.sender);
         require(_amount > 0, "Cannot stake nothing");
-        uint256 stakeholderIndex = stakeholderToIndex[msg.sender];
-        if (stakeholderIndex == 0) {
-            stakeholderIndex = addStakeholder(msg.sender);
-        }
 
-        Stakeholder storage stakeholder = stakeholders[stakeholderIndex];
-
-        // User stakes first time
-        if (stakeholder.stakes.length == 0) {
-            stakeholder.timeOfFirstStake = block.timestamp;
-        }
-
-        stakeholder.stakes.push(
-            Stake({
-                stakeholderAddress: msg.sender,
-                amount: _amount,
-                since: block.timestamp
-            })
-        );
-
-        stakeholder.totalStaking += _amount;
         balances[msg.sender] += _amount;
         stakingToken.transferFrom(msg.sender, address(this), _amount);
 
-        emit Staked(msg.sender, _amount, stakeholderIndex, block.timestamp);
+        emit Staked(msg.sender, _amount, block.timestamp);
     }
 
     function unstake() public {
-        uint256 senderIndex = stakeholderToIndex[msg.sender];
-        require(senderIndex != 0, "There is no you in stakeholder list");
-        require(hasStakes(senderIndex), "Have no stakes");
+        require(balances[msg.sender] > 0, "Nothing unstake");
         require(
             block.timestamp >
-                stakeholders[senderIndex].timeOfFirstStake + freezeTime,
-            "timeFreeze is not over"
+                holders[msg.sender].lastRewardUpdateTime + freezeTime,
+            "The time to unstake is not over"
         );
 
-        Stakeholder storage stakeholder = stakeholders[senderIndex];
-        uint256 totalStakingOfStakeholder = stakeholder.totalStaking;
-        delete stakeholder.stakes;
+        updateReward(msg.sender);
 
-        stakeholder.totalStaking = 0;
-        balances[msg.sender] -= totalStakingOfStakeholder;
-        stakingToken.transfer(msg.sender, totalStakingOfStakeholder);
-    }
+        address sender = msg.sender;
+        uint256 balanceOfSender = balances[sender];
+        balances[sender] = 0;
 
-    function calculateStakeReward(Stake memory currentStake)
-        internal
-        view
-        returns (uint256)
-    {
-        uint256 amountOfTenMinutes = (block.timestamp - currentStake.since) /
-            timeCharge;
-        uint256 stakingTokenPerMinutes = amountOfTenMinutes *
-            currentStake.amount;
-        uint256 rewardForCurrentStake = (stakingTokenPerMinutes *
-            rewardPercent) / 100;
+        stakingToken.transfer(sender, balanceOfSender);
 
-        return rewardForCurrentStake;
+        emit Unstaked(sender, balanceOfSender, block.timestamp);
     }
 
     function claim() public {
-        uint256 senderIndex = stakeholderToIndex[msg.sender];
+        updateReward(msg.sender);
+        require(holders[msg.sender].reward > 0, "Nothing claim");
 
-        require(senderIndex != 0, "There is no you in stakeholder list");
-        require(hasStakes(senderIndex), "Have no stakes");
+        address sender = msg.sender;
+        uint256 reward = holders[sender].reward;
+        holders[sender].reward = 0;
 
-        Stake[] memory stakeholderStakes = stakeholders[senderIndex].stakes;
-        uint256 allRewardsOfSender;
+        rewardToken.transfer(sender, reward);
 
-        for (
-            uint256 stakeIndex = 0;
-            stakeIndex < stakeholderStakes.length;
-            stakeIndex++
-        ) {
-            Stake memory currentStake = stakeholderStakes[stakeIndex];
-            allRewardsOfSender += calculateStakeReward(currentStake);
-            stakeholders[senderIndex].stakes[stakeIndex].since = block
-                .timestamp;
-        }
-
-        rewardToken.transfer(msg.sender, allRewardsOfSender);
+        emit Claimed(sender, reward, block.timestamp);
     }
 }
