@@ -11,13 +11,10 @@ contract Staking is AccessControl {
     uint256 public stakingRate = 20;
     uint256 public freezeTime = 1 minutes;
 
-    struct Holder {
-        uint256 reward;
-        uint256 lastRewardUpdateTime;
-    }
-
     mapping(address => uint256) public balances;
-    mapping(address => Holder) public holders;
+    mapping(address => uint) public times;
+    mapping(address => uint) public rewards;
+    
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
@@ -55,13 +52,13 @@ contract Staking is AccessControl {
     }
 
     function updateReward(address _holderAddress) internal {
-        holders[_holderAddress].reward += earned(_holderAddress);
-        holders[_holderAddress].lastRewardUpdateTime = block.timestamp;
+        rewards[_holderAddress] += earned(_holderAddress);
+        times[_holderAddress] = block.timestamp;
     }
 
     function earned(address _address) internal view returns (uint256) {
         uint256 integerAmountOfRewardTime = (block.timestamp -
-            holders[_address].lastRewardUpdateTime) / rewardTime;
+            times[_address]) / rewardTime;
         uint256 reward = ((integerAmountOfRewardTime * balances[_address]) *
             stakingRate) / 100;
         return reward;
@@ -81,7 +78,7 @@ contract Staking is AccessControl {
         require(balances[msg.sender] > 0, "Nothing unstake");
         require(
             block.timestamp >
-                holders[msg.sender].lastRewardUpdateTime + freezeTime,
+                times[msg.sender] + freezeTime,
             "The time to unstake is not over"
         );
 
@@ -98,11 +95,11 @@ contract Staking is AccessControl {
 
     function claim() public {
         updateReward(msg.sender);
-        require(holders[msg.sender].reward > 0, "Nothing claim");
+        require(rewards[msg.sender] > 0, "Nothing claim");
 
         address sender = msg.sender;
-        uint256 reward = holders[sender].reward;
-        holders[sender].reward = 0;
+        uint256 reward = rewards[sender];
+        rewards[sender] = 0;
 
         rewardToken.transfer(sender, reward);
 

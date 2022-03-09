@@ -14,7 +14,14 @@ task("stake", "Stake tokens to staking contract")
       "Staking",
       STAKING_CONTRACT
     );
-    await staking.connect(staker).stake(amount);
+    await staking.connect(staker).stake(amount, {
+      // from: staker.address,
+      // gasPrice: hre.ethers.utils.parseEther("0.01"),
+      // gasLimit: hre.ethers.utils.parseEther("0.0001")
+      // gasLimit: 210
+    });
 
-    console.log(`${staker.address} have staked ${amount} to ${staking.address}`);
+    console.log(
+      `${staker.address} have staked ${amount} to ${staking.address}`
+    );
   });
