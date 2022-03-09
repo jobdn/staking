@@ -31,7 +31,7 @@ const config: HardhatUserConfig = {
       forking: {
         url: `https://eth-rinkeby.alchemyapi.io/v2/${process.env.ALCHEMY_PRIVATE_KEY}`,
         blockNumber: 10263648,
-      }
+      },
     },
     rinkeby: {
       url: `https://eth-rinkeby.alchemyapi.io/v2/${process.env.ALCHEMY_PRIVATE_KEY}`,
@@ -42,7 +42,7 @@ const config: HardhatUserConfig = {
     currency: "USD",
   },
   etherscan: {
-    apiKey: process.env.ETHERSCAN_API_KEY,
+    apiKey: process.env.ETHERSCAN_KEY,
   },
 };
 
