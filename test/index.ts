@@ -85,12 +85,7 @@ describe("Staking", function () {
       await staking.stake(10000);
       await staking.setRate(30);
 
-      staking
-        .holders(owner.address)
-        .then((holder) => {
-          expect(holder.reward).to.equal(2000);
-        })
-        .catch(console.log);
+      expect(await staking.rewards(owner.address)).to.equal(2000);
 
       // in 1 minutes
       await network.provider.send("evm_increaseTime", [61]);
